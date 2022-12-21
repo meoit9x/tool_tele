@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+Main-Class: it.tdlight.example.Example
+Class-Path: reactive-streams-1.0.3.jar tdlight-natives-windows-amd64-4.0
+ .257.jar core-3.4.1.jar slf4j-api-2.0.0-alpha7.jar fastutil-8.5.8.jar t
+ dlight-java-2.8.3.0.jar appdirs-1.2.1.jar jna-5.6.0.jar tdlight-api-leg
+ acy-4.0.255.jar slf4j-simple-2.0.0-alpha7.jar jna-platform-5.6.0.jar td
+ light-natives-linux-amd64-4.0.257.jar
+
