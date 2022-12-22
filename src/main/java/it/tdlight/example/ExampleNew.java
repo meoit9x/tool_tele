@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import static it.tdlight.example.Controller.Logging;
@@ -24,7 +25,6 @@ public class ExampleNew {
 
     private static volatile boolean needQuit = false;
     private static volatile boolean canQuit = false;
-    private static Logger logger = LoggerFactory.getLogger("Tdlib");
 
     /**
      * Admin user id, used by the stop command example
@@ -34,11 +34,17 @@ public class ExampleNew {
     private static SimpleTelegramClient client;
 
     public static void main(String[] args) throws InterruptedException {
+
+        try {
+            login("");
+        } catch (CantLoadLibrary e) {
+            e.printStackTrace();
+        }
+
         while (!needQuit) {
             getCommand();
         }
         while (!canQuit) {
-            logger.error("Exiting...");
             Thread.sleep(1);
         }
     }
@@ -74,6 +80,7 @@ public class ExampleNew {
 
         // Start the client
         client.start(authenticationData);
+//        client.waitForExit();
     }
 
     private static List<TdApi.Chat> ids = new ArrayList<>();
@@ -86,15 +93,18 @@ public class ExampleNew {
         try {
             switch (commands[0]) {
                 case "!getchat":
+                    canQuit = true;
+//                    needQuit = true;
                     Controller.getChat(client, o -> {
-                        logger.info("----------- LIST CHAT -----------");
                         for (long id : o) {
-                            Controller.getChatInfo(client, id, o1 -> {
-                                ids.add(o1);
-                                Controller.Logging("ID: " + id + "  Name: " + o1.title);
-                            });
+                            Controller.Logging("ID: " + id + "  Name: ");
+//                            new Controller.ThreadGetChatInfo(client, id, chat -> {
+//                                ids.add(chat);
+//                                Controller.Logging("ID: " + id + "  Name: " + chat.title);
+//                            }).start();
                         }
                     });
+
                     break;
                 case "!getmember":
                     try {
@@ -107,40 +117,43 @@ public class ExampleNew {
                         Controller.Logging("Member is " + chat.size());
                     });
                     break;
-                case "!getsuper":
-                    try {
-                        idGroup = Long.parseLong(commands[1]);
-                    } catch (NumberFormatException numberFormatException) {
-                        break;
-                    }
+                case "getsuper":
+//                    try {
+//                        idGroup = Long.parseLong(commands[1]);
+//                    } catch (NumberFormatException numberFormatException) {
+//                        break;
+//                    }
+                    idGroup = -1001315055119L;
                     Controller.SupergroupFullInfo(client, idGroup, chat -> {
                         Logging(chat.memberCount + " ----");
                     });
                     break;
                 case "!add":
-                    try {
-                        idGroup = Long.parseLong(commands[1]);
-                    } catch (NumberFormatException numberFormatException) {
-                        break;
-                    }
-                    for (long l : members) {
-                        Controller.addChatMembers(client, idGroup, l, result -> {
+                    Iterator<Long> iterator = Controller.listMembers.keySet().iterator();
+
+                    while (iterator.hasNext()) {
+                        Controller.addChatMembers(client, -614183139, iterator.next(), result -> {
                         });
                     }
                     break;
                 case "!login":
                     canQuit = true;
-                    needQuit = true;
+//                    needQuit = true;
                     if (client != null)
                         client.sendClose();
-                    login(commands.length > 1 ? commands[1] : "");
+                    new Thread(() -> {
+                        try {
+                            login(commands.length > 1 ? commands[1] : "");
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        } catch (CantLoadLibrary e) {
+                            e.printStackTrace();
+                        }
+                    }).start();
                     break;
 
             }
         } catch (ArrayIndexOutOfBoundsException e) {
-            logger.error("Not enough arguments");
-        } catch (InterruptedException | CantLoadLibrary e) {
-            e.printStackTrace();
         }
 
     }
@@ -174,9 +187,6 @@ public class ExampleNew {
 
             byte[] bytestext = StringUtils.getBytesUtf8(text);
             String utf8Text = StringUtils.newStringUtf8(bytestext);
-
-            String format = String.format("Received new message from chat %s: %s%n", utf8ChatName, utf8Text);
-            logger.info(format);
         });
     }
 
@@ -204,8 +214,8 @@ public class ExampleNew {
         if (authorizationState instanceof TdApi.AuthorizationStateReady) {
             canQuit = false;
             needQuit = false;
-            logger.info("Login success");
-            getCommand();
+            Logging("Login success");
+//            getCommand();
         } else if (authorizationState instanceof TdApi.AuthorizationStateClosing) {
             System.out.println("Closing...");
         } else if (authorizationState instanceof TdApi.AuthorizationStateClosed) {

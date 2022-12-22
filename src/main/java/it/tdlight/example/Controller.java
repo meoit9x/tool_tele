@@ -9,13 +9,16 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 public class Controller {
 
+    static BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
     public static String promptString(String prompt) {
         System.out.print(prompt);
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         String str = "";
         try {
             str = reader.readLine();
@@ -28,6 +31,24 @@ public class Controller {
     public static void getChat(SimpleTelegramClient client, Consumer<long[]> consumer) {
         TdApi.GetChats getChats = new TdApi.GetChats(null, 20);
         client.send(getChats, result -> consumer.accept(result.get().chatIds));
+    }
+
+    public static class ThreadGetChatInfo extends Thread {
+
+        SimpleTelegramClient client;
+        long id;
+        Consumer<TdApi.Chat> consumer;
+
+        public ThreadGetChatInfo(SimpleTelegramClient client, long id, Consumer<TdApi.Chat> consumer) {
+            this.client = client;
+            this.id = id;
+            this.consumer = consumer;
+        }
+
+        @Override
+        public void run() {
+            getChatInfo(client, id, consumer);
+        }
     }
 
     public static void getChatInfo(SimpleTelegramClient client, long id, Consumer<TdApi.Chat> consumer) {
@@ -90,15 +111,54 @@ public class Controller {
         isFirstRequest = true;
     }
 
-    public static void SupergroupFullInfo(SimpleTelegramClient client, long id, Consumer<TdApi.SupergroupFullInfo> consumer) {
-        TdApi.GetSupergroupFullInfo supergroupFullInfo = new TdApi.GetSupergroupFullInfo(id);
-        client.send(supergroupFullInfo, result -> {
-            TdApi.Error error = result.getError();
-            if (error != null) {
-                Logging(error.message);
-            } else
-                consumer.accept(result.get());
+    //    private static List<TdApi.ChatMember> listMember = new ArrayList<>();
+    public static ConcurrentHashMap<Long,Integer> listMembers = new ConcurrentHashMap();
 
+    private static int limit = 100;
+    private static int offSet = 0;
+    private static int totalCountGroup = 0;
+    static boolean skipLoadMember = false;
+
+
+    public static void SupergroupFullInfo(SimpleTelegramClient client, long id, Consumer<TdApi.SupergroupFullInfo> consumer) {
+        TdApi.GetChat getChat = new TdApi.GetChat(id);
+        client.send(getChat, result -> {
+            if (result.get().type instanceof TdApi.ChatTypeSupergroup) {
+                TdApi.ChatTypeSupergroup chatTypeSupergroup = (TdApi.ChatTypeSupergroup) result.get().type;
+                TdApi.GetSupergroupFullInfo supergroupFullInfo = new TdApi.GetSupergroupFullInfo(chatTypeSupergroup.supergroupId);
+                client.send(supergroupFullInfo, result1 -> {
+                    totalCountGroup = result1.get().memberCount;
+                    if (result1.isError()) {
+                        Logging(result1.getError().message);
+                    } else {
+                        GetMemberGroup(client, chatTypeSupergroup.supergroupId);
+                    }
+                });
+            }
+        });
+    }
+
+    private static void GetMemberGroup(SimpleTelegramClient client, long id) {
+        TdApi.GetSupergroupMembers getSupergroupMembers = new TdApi.GetSupergroupMembers(id,
+                new TdApi.SupergroupMembersFilterRecent(), offSet, limit);
+        client.send(getSupergroupMembers, result2 -> {
+            if (result2.isError()) {
+                Logging(result2.getError().message);
+            } else {
+                if (result2.get().members.length <= 0) {
+                    skipLoadMember = true;
+                    return;
+                }
+                for (TdApi.ChatMember chatMember : result2.get().members) {
+                    if (chatMember.memberId instanceof TdApi.MessageSenderUser) {
+                        TdApi.MessageSenderUser member = (TdApi.MessageSenderUser) chatMember.memberId;
+                        listMembers.put(member.userId, 1);
+                    }
+                }
+                Logging("offSet " + offSet + " ____  natruou " + listMembers.size());
+                offSet += 100;
+                GetMemberGroup(client, id);
+            }
         });
     }
 
